@@ -1,0 +1,9 @@
+Package: syntheseRgeonature
+Title: Package permettant de réaliser l'extraction et la synthese des données Geonature 
+Version: 0.0.0.9000
+Authors@R: person("First", "Last", email = "first.last@example.com", role = c("aut", "cre"))
+Description: What the package does (one paragraph).
+Depends: R (>= 3.4.4)
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
