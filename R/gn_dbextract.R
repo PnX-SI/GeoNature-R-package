@@ -39,5 +39,7 @@ gn_dbextract<-function(nomdb,id,pw,req){
   data<-DBI::dbGetQuery(con,req)
   cache<-RPostgreSQL::dbDisconnect(con)
 
+  format(con)
+
   data
 }
