@@ -36,7 +36,7 @@ plot<-collapsibleTree::collapsibleTree(organisation[sel,c(4:6)],
                               "table_name",
                               "column_name"),
                 fill="blue",
-                root="geonaturedb")
+                root=setupDB$dbname)
 plot
 }
 
