@@ -10,7 +10,8 @@ Imports:
     RPostgreSQL, 
     DBI, 
     rmarkdown,
-    knitr
+    knitr,
+    collapsibleTree
 License: GPL-3
 Encoding: UTF-8
 LazyData: true

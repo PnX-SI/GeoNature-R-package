@@ -53,14 +53,14 @@ gn.setup <- function (dbname,host,port,user)
 
 	print("Patientez quelques secondes, nous testons la connexion...")
 
-	connect_test <- try(DBI::dbConnect(dbDriver("PostgreSQL"), dbname = dbname,host = host, port = port,user = user, password = pass), silent=T)
+	connect_test <- try(DBI::dbConnect(DBI::dbDriver("PostgreSQL"), dbname = dbname,host = host, port = port,user = user, password = pass), silent=T)
  		if(is(connect_test,"try-error")) {print("La connexion à votre base de données GeoNature a échoué")}
-  		else {setupDB_test <- dbConnect(dbDriver("PostgreSQL"), dbname = dbname,host = host, port = port,user = user, password = pass)
+  		else {setupDB_test <- DBI::dbConnect(DBI::dbDriver("PostgreSQL"), dbname = dbname,host = host, port = port,user = user, password = pass)
   			print("La connexion à PostgreSQL a bien été configurée. Un objet setupDB a été créé, il sera nécessaire pour les autres fonctions de ce package. Si vous le supprimez, veuillez relancer la fonction gn_setup")
   			setupDB}
-	
-	invisible(dbDisconnect(conn = setupDB_test))
-	
+
+	invisible(DBI::dbDisconnect(conn = setupDB_test))
+
 	setupDB <- list(dbname = dbname,host = host, port = port,user = user, password = pass)
 
 }
