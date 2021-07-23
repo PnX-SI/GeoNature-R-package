@@ -1,0 +1,369 @@
+---
+title: "Rapport des observations d'invertébrés dans la base GeoNature du Parc national des Ecrins"
+developer: "Rémy Moine, Damien Combrisson, Gil Deluermoz, Théo Lechémia"
+
+
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    social: 
+    theme: united
+---
+
+```{r setup, include=FALSE, results=FALSE}
+library(lubridate)
+##############################################################################
+            #DEBUT SECTION 
+##############################################################################
+date_rapport_min10<-'2017-01-01'# période de 1 an avant la période concernée (médianne)(date_rapport_min moins 1 an)
+date_rapport_min<-'2018-01-01'# début période concernée par le rapport (AAAA-MM-JJ)
+date_rapport_max<-'2018-12-31'# fin période concernée par le rapport (AAAA-MM-JJ)
+res<-"1 month"
+id<-"rpne"
+pw<-"18Rpne95"
+
+library(highcharter)
+library(dplyr)
+library(viridisLite)
+library(forecast)
+library(treemap)
+library(flexdashboard)
+
+
+thm <- 
+  hc_theme(
+    colors = c("#981D97", "#FF8200", "#CEDC00", "#00A3E0"),
+    chart = list(
+      backgroundColor = "#981D97",
+      style = list(fontFamily = "Source Sans Pro")
+    ),
+    xAxis = list(
+      gridLineWidth = 1
+    )
+  )
+
+
+
+library(RPostgreSQL)
+
+ 
+# loads the PostgreSQL driver
+drv <- dbDriver("PostgreSQL")
+# creates a connection to the postgres database
+# note that "con" will be used later in each connection to the database
+
+con <- dbConnect(drv, dbname = "geonature2db",
+                 host = "url", port = 5432,
+                 user = id, password = pw)
+
+```
+
+```{sql Données observées période,  connection=con, output.var="danow", echo=F, message=F, warning=F }
+SELECT s.id_synthese,
+    s.date_min as dateobs,
+    s.observers as observateurs,
+    s.determiner as determinateur,
+    n.cd_nom,
+    tx.nom_valide,
+    tx.lb_nom AS nom_latin,
+    tx.classe,
+    tx.ordre,
+    tx.famille,
+    tx.phylum,
+    s.count_min as effectif_total,
+    s.altitude_min AS altitude,
+    st_x(st_transform(s.the_geom_point, 2154))::integer AS x,
+    st_y(st_transform(s.the_geom_point, 2154))::integer AS y,
+    s.meta_create_date as date_insert,
+    s.meta_update_date as date_update,
+    sou.name_source as nom_source,
+    st_x(st_transform(s.the_geom_point, 4326))::integer AS xwgs,
+    st_y(st_transform(s.the_geom_point, 4326))::integer AS ywgs
+   FROM gn_synthese.synthese s
+     JOIN taxonomie.taxref tx ON tx.cd_nom = s.cd_nom
+     JOIN taxonomie.bib_noms n ON n.cd_nom = s.cd_nom
+     JOIN gn_synthese.t_sources sou ON sou.id_source = s.id_source
+  WHERE 
+    tx.phylum in ('Arthropoda', 'Mollusca') AND
+    s.date_min >= ?date_rapport_min AND
+    s.date_min < ?date_rapport_max 
+  ;
+```
+
+```{sql connection= con,output.var="spnew",echo=F}
+WITH 
+taxon_after AS (  
+SELECT DISTINCT s.cd_nom  
+  FROM gn_synthese.synthese s
+   JOIN taxonomie.taxref tx ON tx.cd_nom = s.cd_nom
+     JOIN gn_synthese.t_sources sou ON sou.id_source = s.id_source
+  WHERE 
+    tx.phylum in ('Arthropoda', 'Mollusca') AND
+    s.date_min >= ?date_rapport_min AND
+    s.date_min < ?date_rapport_max 
+)
+,taxon_before AS (
+  SELECT DISTINCT s.cd_nom  
+  FROM gn_synthese.synthese s
+   JOIN taxonomie.taxref tx ON tx.cd_nom = s.cd_nom
+     JOIN gn_synthese.t_sources sou ON sou.id_source = s.id_source
+  WHERE 
+    tx.phylum IN ('Arthropoda', 'Mollusca') AND
+    s.date_min < ?date_rapport_min 
+  )
+SELECT DISTINCT
+s.observers AS observateurs,
+s.date_min aS dateobs,
+    t.cd_nom,
+    t.nom_valide,
+    t.classe,
+    t.ordre,
+    t.famille,
+    st_x(st_transform(s.the_geom_point, 2154))::integer AS x,
+    st_y(st_transform(s.the_geom_point, 2154))::integer AS y,
+    sou.name_source as nom_source,
+    st_x(st_transform(s.the_geom_point, 4326))::float AS xwgs,
+    st_y(st_transform(s.the_geom_point, 4326))::float AS ywgs
+FROM taxon_after ta
+ JOIN taxonomie.taxref t ON t.cd_nom = ta.cd_nom
+ JOIN gn_synthese.synthese s ON s.cd_nom = ta.cd_nom
+ JOIN gn_meta.t_datasets l ON l.id_dataset = s.id_dataset 
+ JOIN gn_synthese.t_sources sou ON sou.id_source = s.id_source
+ 
+WHERE ta.cd_nom NOT IN (SELECT cd_nom FROM taxon_before)
+ORDER BY t.classe, t.ordre, t.famille, t.nom_valide
+;
+```
+
+```{sql Espèces observées sur 1 ans avant période,  connection=con, output.var="sp10ans", include=F }
+SELECT s.id_synthese,
+    s. date_min AS dateobs,
+    n.cd_nom,
+    tx.nom_valide,
+    tx.lb_nom AS nom_latin,
+    s.altitude_min AS altitude,
+    st_x(st_transform(s.the_geom_point, 2154))::integer AS x,
+    st_y(st_transform(s.the_geom_point, 2154))::integer AS y,
+    st_x(st_transform(s.the_geom_point, 2154))::integer AS xwgs,
+    st_y(st_transform(s.the_geom_point, 2154))::integer AS ywgs
+   FROM gn_synthese.synthese s
+     JOIN taxonomie.taxref tx ON tx.cd_nom = s.cd_nom
+     JOIN taxonomie.bib_noms n ON n.cd_nom = s.cd_nom
+  WHERE 
+    tx.phylum IN ('Arthropoda', 'Molusca') AND
+    s.date_min < ?date_rapport_min AND
+    s.date_max >= ?date_rapport_min10
+  ;
+```
+
+```{sql Espèces observées avant période,  connection=con, output.var="sptotref", include=F }
+SELECT s.id_synthese,
+    s.date_min as dateobs,
+    n.cd_nom,
+    tx.nom_valide,
+    tx.lb_nom AS nom_latin,
+    s.altitude_min AS altitude,
+    st_x(st_transform(s.the_geom_point, 2154))::integer AS x,
+    st_y(st_transform(s.the_geom_point, 2154))::integer AS y,
+    st_x(st_transform(s.the_geom_point, 2154))::integer AS xwgs,
+    st_y(st_transform(s.the_geom_point, 2154))::integer AS ywgs
+   FROM gn_synthese.synthese s
+     JOIN taxonomie.taxref tx ON tx.cd_nom = s.cd_nom
+     JOIN taxonomie.bib_noms n ON n.cd_nom = s.cd_nom
+  WHERE 
+    tx.phylum in ('Arthropoda', 'Molusca') AND
+    s.date_min < ?date_rapport_min AND
+    s.date_max >= ?date_rapport_min10 
+  ;
+```
+
+```{r meta, include=FALSE}
+cache<-dbDisconnect(con)
+
+nbobs<-length(unique(danow$id_synthese))
+dates<-sort(unique(danow$dateobs))
+
+nbtaxa_cd<-length(unique(danow$cd_nom))
+
+nbnewsp<-length(unique(spnew$cd_nom))
+
+tauxnew<-round(nbnewsp/nbtaxa_cd*100,0)
+
+nom<-as.character(paste("Rapport-Annuel-Invertebres_",unique(last(year(dates))),"_especes-nouvelles-observées_PNE.csv",sep=""))
+
+write.csv(spnew,file=nom)
+```
+
+Le rapport couvre la période du `r paste(day(date_rapport_min),month(date_rapport_min),year(date_rapport_min),sep="/")`  au `r paste(day(date_rapport_max),month(date_rapport_max),year(date_rapport_max),sep="/")`.
+
+Column{.tabset data-width=600}
+-----------------------------------------------------------------------
+### Vue générale
+```{r fig.}
+library(ggplot2)
+library(plotly)
+library(lubridate)
+
+nbtaxageonat<-length(unique(sptotref$cd_nom))
+
+sumup<-data.frame(denomb=c(nbtaxageonat,nbtaxa_cd-nbnewsp,nbnewsp),
+                  category=c(paste("Taxons dans Géonature non recontactés (",ymd(date_rapport_min10)," -> ",ymd(date_rapport_min10),")",sep=""),
+                    paste("Taxons déjà référencés dans Géonature recontactés (",ymd(date_rapport_min)," -> ",ymd(date_rapport_max),")",sep=""),
+                    paste("Nouveaux taxons (",ymd(date_rapport_min)," -> ",ymd(date_rapport_max),")",sep="")))
+sumup$fraction = sumup$denomb / sum(sumup$denomb)
+sumup = sumup[order(sumup$fraction), ]
+sumup$ymax = cumsum(sumup$fraction)
+sumup$ymin = c(0, head(sumup$ymax, n=-1))
+
+col<-c("#FF8200", "#981D97","#CEDC00")
+
+sumup %>%
+  plot_ly(labels= ~category, values = ~denomb, 
+          insidetextfont = list(col = '#FFFFFF'),
+           marker = list(colors = col,
+                      line = list(col = '#FFFFFF', width = 1))) %>%
+  add_pie(hole = 0.6) %>%
+  layout(showlegend = F,
+         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+```
+
+### Répartition du nombre d'observations
+```{r métadonnées_graph}
+library(lubridate)
+library(ggplot2)
+library(plotly)
+library(stringr)
+
+date<-as_date(paste(year(dates),month(sp10ans$dateobs),day(sp10ans$dateobs),sep="-"))
+date1<-data.frame(date,count=rep(1,length(date)))
+agg0<-aggregate(count~date,data=date1,sum)
+
+danow1<-data.frame(danow,week=week(danow$dateobs))
+BREAKS1<-aggregate(dateobs~week,data=danow1,max)
+
+
+p<-ggplot(danow,aes(x=dateobs))+
+  geom_vline(aes(xintercept=as.numeric(median(agg0$date), na.rm=T),color=paste(day(median(agg0$date)),"/",month(median(agg0$date))," (période du\n ",ymd(date_rapport_min10)," au ",ymd(date_rapport_min),")",sep="")),linetype="dashed")+
+  geom_vline(aes(xintercept=as.numeric(median(danow$dateobs), na.rm=T),color=paste(day(median(danow$dateobs)),"/",month(median(danow$dateobs))," (période du\n ",ymd(date_rapport_min)," au ",ymd(date_rapport_max),")",sep="")),linetype="dashed")+
+  scale_color_manual(values=c("#981D97","#CEDC00"),name = "\nDate médiane: ")+
+  geom_freqpoly(color="#981D97",breaks=BREAKS1$dateobs)+
+  xlab("Date")+
+  ylab("Nombre d'observations")+
+  scale_x_date(date_labels="%d/%m",breaks="1 month")+
+  theme(axis.text.x = element_text(size=8, angle=45,vjust= 1, hjust= 1),
+        panel.grid.major = element_line(colour="grey"),
+        legend.position = "bottom",
+        panel.background = element_blank())
+
+
+ggplotly(p,tooltip="count")
+```
+
+Column {.tabset width=400}
+-----------------------------------------------------------------------
+
+### Répartition taxonomique
+```{r Préparation des données}
+toto<-data.frame(danow[,c(5:6,8:11)],count=rep(1,nrow(danow)))
+agg1<-aggregate(toto$count,by=list(toto$phylum,toto$classe,toto$ordre,toto$famille,toto$cd_nom,toto$nom_valide),"sum")
+
+agg2<-agg1%>%arrange(Group.1,Group.2,Group.3,Group.4,Group.5,Group.6)
+colnames(agg2)<-c("Phylum","Classe","Ordre","Famille","Cd_nom","Espèce","Nb_individus")
+
+taux_error_taxo<-round((length(unique(toto$cd_nom))-length(unique(agg2$Cd_nom)))/length(unique(toto$cd_nom))*100,1)
+
+name<-paste(agg2$Espèce," (cd_nom= ",agg2$Cd_nom,")",sep="")
+nodesize<-agg2$Nb_individus
+dagg2<-data.frame(agg2,name,nodesize)
+
+lab<-paste(nrow(dagg2),"espèces")
+```
+
+```{r}
+# par ordre --> RS, nb d'occurences, nb nouvelles espèces = en nb + en %
+temp1<-data.frame(danow[,c("classe","ordre","cd_nom","nom_valide","id_synthese")],
+                  occurence=rep(1,nrow(danow)),
+                  count=rep(1,nrow(danow)))
+library(dplyr)
+library(formattable)
+
+aggtemp<-aggregate(occurence~classe+ordre,temp1,sum)
+aggtemp1<-aggtemp%>%arrange(classe,ordre)
+
+nb_occur<-rep(0,nrow(aggtemp1))
+taux_nb_occur<-rep(0,nrow(aggtemp1))
+nb_sp<-rep(0,nrow(aggtemp1))
+taux_nb_sp<-rep(0,nrow(aggtemp1))
+nb_new_sp<-rep(0,nrow(aggtemp1))
+taux_nouv_sp<-rep(0,nrow(aggtemp1))
+ordre<-rep(0,nrow(aggtemp1))
+
+for (i in c(1:nrow(aggtemp1))){
+  at<-which(aggtemp1[i,"ordre"]==temp1$ordre)
+  
+  nb_occur[i]<-length(unique(temp1[at,"id_synthese"]))
+
+  ordre[i]<-unique(temp1[at,"ordre"])
+  
+  nb_sp[i]<-length(unique(temp1[at,"cd_nom"]))
+  
+  nb_new_sp[i]<-length(which(unique(temp1[at,"cd_nom"])%in%unique(spnew$cd_nom)))
+}
+
+datatab<-data.frame(aggtemp1[,-3],
+                    nb_occur,
+                    taux_nb_occur,
+                    nb_sp,
+                    taux_nb_sp,
+                    nb_new_sp,
+                    taux_nouv_sp)
+datatab$taux_nb_occur<-round(datatab$nb_occur/sum(datatab$nb_occur)*100)
+datatab$taux_nb_sp<-round(datatab$nb_sp/sum(datatab$nb_sp)*100)
+datatab$taux_nouv_sp<-round(datatab$nb_new_sp/sum(datatab$nb_sp)*100)
+colnames(datatab)<-c("Classe","Ordre",
+                     "Nb. occurences",
+                     "% occurences",
+                     "Nb. espèces",
+                     "% espèces",
+                     "Nb. nouvelles espèces",
+                     "% espèces nouvelles")
+datatab<-rbind(datatab,TOTAL=c(NA,NA,colSums(datatab[,-c(1,2)])))
+
+formattable(datatab)
+```
+
+
+### Localisation
+
+```{r, Cartographie, echo= F}
+library(ggmap)
+library(sp)
+
+toto<-data.frame(danow[,c("id_synthese","nom_valide","observateurs","dateobs","effectif_total","altitude","x","y","cd_nom")])
+
+merc<-CRS("+init=epsg:3857")
+l93<-CRS("+init=epsg:2154")
+wgs84<-CRS("+init=epsg:4326")
+
+sp_toto_l93<-SpatialPointsDataFrame(coords=toto[,c(7,8)],data=toto[,-c(7,8)])
+proj4string(sp_toto_l93)<-l93
+sp_toto_wgs84<-spTransform(sp_toto_l93,CRS("+init=epsg:4326"))
+sp_toto_merc<-spTransform(sp_toto_wgs84,CRS("+init=epsg:3857"))
+
+popup<-paste(sp_toto_wgs84@data[,2]," (cd_nom=",sp_toto_wgs84@data[,7],", observation n° ",sp_toto_wgs84@data[,1], "), le ",sp_toto_wgs84@data[,4]," par ",sp_toto_wgs84@data[,3]," (",sp_toto_wgs84@data[,5],"individus à ",sp_toto_wgs84@data[,6]," mètres d'altitude).")
+
+colramp<-rep("#981D97",length(sp_toto_wgs84@data$cd_nom))
+newsp1<-which(sp_toto_wgs84@data$cd_nom%in%spnew$cd_nom)
+colramp[newsp1]<-"#FF8200"
+
+library(leaflet)
+leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(lng=as.vector(sp_toto_wgs84@coords[,1]), lat=as.vector(sp_toto_wgs84@coords[,2]),radius=5, popup=popup, color=colramp,
+    stroke = FALSE, fillOpacity = 1)%>%
+  addLegend("bottomright",colors=unique(colramp),
+            title=c("Observations de "),
+            labels=c("taxons déjà connus","nouvelles espèces"),
+            opacity=1 )
+```
